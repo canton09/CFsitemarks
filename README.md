@@ -1,6 +1,7 @@
 黑风导航 - 使用说明书
 欢迎使用应用！这是一个基于 Cloudflare Worker 的网页应用，旨在提供个性化的导航和备忘录管理功能。
 以下是如何使用这个应用的详细说明：
+![clipboard-image-1719752925](https://github.com/canton09/CFsitemarks/assets/86143752/a2edb818-eca1-43b1-97f4-eee401100556)
 
 一.自由增加自己喜欢的分类
   您可以通过点击顶部的分类按钮来筛选显示的链接
