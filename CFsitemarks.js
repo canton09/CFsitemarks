@@ -21,6 +21,8 @@ async function handleRequest(request) {
       return handleAPI(request, KV_KEYS.MEMOS);
     } else if (pathname === '/api/client-info') {
       return handleClientInfoAPI(request);
+    } else if (pathname === '/api/hitokoto') {
+      return handleHitokotoProxy(request);
     }
     return new Response('API not found', { status: 404 });
   }
@@ -257,7 +259,7 @@ function generateCommonHTML(title, content) {
 
 function generateHomePage() {
   const content = `
-    <div id="hitokoto"></div>
+    <div id="hitokoto" style="text-align: center; font-style: italic; margin-bottom: 20px;"></div>
     <div id="categories"></div>
     <div id="links"></div>
     <div id="add-form" style="display: none;">
@@ -405,7 +407,8 @@ function generateHomePage() {
                                 method: 'PUT',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                },body: JSON.stringify({ links: importedLinks, password: '${PASSWORD}' }),
+                                },
+                                body: JSON.stringify({ links: importedLinks, password: '${PASSWORD}' }),
                             });
                             if (response.ok) {
                                 await fetchLinks();
@@ -460,7 +463,7 @@ function generateHomePage() {
 
         async function fetchHitokoto() {
             try {
-                const response = await fetch('https://v1.hitokoto.cn/');
+                const response = await fetch('/api/hitokoto');
                 if (!response.ok) {
                     throw new Error(\`无法获取一言数据: \${response.statusText}\`);
                 }
@@ -468,6 +471,7 @@ function generateHomePage() {
                 document.getElementById('hitokoto').innerHTML = \`\${data.hitokoto} —— \${data.from}\`;
             } catch (error) {
                 console.error('获取一言数据失败:', error);
+                document.getElementById('hitokoto').innerHTML = '无法获取一言，请稍后再试。';
             }
         }
 
@@ -476,6 +480,9 @@ function generateHomePage() {
             await fetchHitokoto();
             showEditControls();
         }
+
+        // 确保在页面加载完成后调用 initPage
+        window.addEventListener('load', initPage);
 
         // 每4秒刷新一次一言
         setInterval(fetchHitokoto, 4000);
@@ -771,6 +778,9 @@ function generateMemoPage() {
             await fetchMemos();
             showEditControls();
         }
+
+        // 确保在页面加载完成后调用 initPage
+        window.addEventListener('load', initPage);
     </script>
   `;
   return generateCommonHTML('备忘录', content);
@@ -836,5 +846,14 @@ function handleClientInfoAPI(request) {
   const clientCountry = request.headers.get('CF-IPCountry');
   return new Response(JSON.stringify({ ip: clientIP, country: clientCountry }), {
     headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+async function handleHitokotoProxy(request) {
+  const hitokotoUrl = 'https://v1.hitokoto.cn/';
+  const response = await fetch(hitokotoUrl);
+  const data = await response.json();
+  return new Response(JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' },
   });
 }
