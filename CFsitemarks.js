@@ -405,8 +405,7 @@ function generateHomePage() {
                                 method: 'PUT',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({ links: importedLinks, password: '${PASSWORD}' }),
+                                },body: JSON.stringify({ links: importedLinks, password: '${PASSWORD}' }),
                             });
                             if (response.ok) {
                                 await fetchLinks();
@@ -488,13 +487,26 @@ function generateHomePage() {
 function generateMemoPage() {
   const content = `
     <div id="memo-container">
-      <div id="memo-input" style="display: none;">
-        <textarea id="new-memo" placeholder="输入新的备忘录..."></textarea>
-        <button onclick="addMemo()">添加备忘录</button>
+      <div id="memo-sidebar">
+        <div id="memo-search">
+          <input type="text" id="search-input" placeholder="搜索备忘录...">
+        </div>
+        <div id="memo-categories">
+          <h3>分类</h3>
+          <ul id="category-list"></ul>
+        </div>
       </div>
-      <div id="memo-list"></div>
+      <div id="memo-main">
+        <div id="memo-list"></div>
+        <div id="memo-input" style="display: none;">
+          <input type="text" id="memo-title" placeholder="标题">
+          <textarea id="memo-content" placeholder="输入新的备忘录..."></textarea>
+          <input type="text" id="memo-category" placeholder="分类">
+          <button onclick="addOrUpdateMemo()">保存备忘录</button>
+        </div>
+      </div>
     </div>
-    <button onclick="location.href='/'">返回主页</button>
+    <button class="function-btn" onclick="location.href='/'">返回主页</button>
     <div id="login-container">
         <button id="login-btn" onclick="showLoginForm()">登录</button>
         <div id="login-form" style="display: none;">
@@ -502,47 +514,178 @@ function generateMemoPage() {
             <button onclick="login()">确认</button>
         </div>
     </div>
+    <style>
+      #memo-container {
+        display: flex;
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: rgba(0, 0, 0, 0.7);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      #memo-sidebar {
+        width: 250px;
+        background-color: rgba(0, 20, 0, 0.8);
+        padding: 20px;
+        border-right: 1px solid #0f0;
+      }
+      #memo-main {
+        flex-grow: 1;
+        padding: 20px;
+      }
+      #memo-search input, #memo-input input, #memo-input textarea {
+        width: 100%;
+        margin-bottom: 10px;
+        background-color: rgba(0, 20, 0, 0.6);
+        border: 1px solid #0f0;
+        color: #0f0;
+        padding: 10px;
+      }
+      #memo-categories h3 {
+        color: #0f0;
+        margin-top: 20px;
+      }
+      #category-list {
+        list-style-type: none;
+        padding: 0;
+      }
+      #category-list li {
+        cursor: pointer;
+        padding: 5px;
+        margin: 2px 0;
+        background-color: rgba(0, 40, 0, 0.6);
+        border-radius: 3px;
+      }
+      #category-list li:hover {
+        background-color: rgba(0, 60, 0, 0.6);
+      }
+      .memo-item {
+        background-color: rgba(0, 20, 0, 0.6);
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 5px;
+        transition: all 0.3s ease;
+      }
+      .memo-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 255, 0, 0.2);
+      }
+      .memo-item h3 {
+        margin-top: 0;
+        color: #0f0;
+      }
+      .memo-item p {
+        margin-bottom: 5px;
+      }
+      .memo-item .memo-category {
+        font-size: 0.8em;
+        color: #0f9;
+      }
+      .memo-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 10px;
+      }
+      .memo-actions button {
+        margin-left: 5px;
+        background-color: rgba(0, 40, 0, 0.6);
+        border: none;
+        color: #0f0;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+      }
+      .memo-actions button:hover {
+        background-color: rgba(0, 60, 0, 0.6);
+      }
+      #memo-input {
+        margin-top: 20px;
+      }
+      .function-btn {
+        display: block;
+        margin: 20px auto;
+      }
+    </style>
     <script>
         let memos = [];
         let isLoggedIn = false;
+        let currentCategory = 'all';
+        let editingMemoId = null;
 
         async function fetchMemos() {
             const response = await fetch('/api/memos');
             memos = await response.json();
             renderMemos();
+            renderCategories();
         }
 
         function renderMemos() {
             const memoList = document.getElementById('memo-list');
-            memoList.innerHTML = memos.map((memo, index) => 
-                '<div class="memo-item">' +
-                    '<p>' + memo + '</p>' +
-                    '<button onclick="deleteMemo(' + index + ')" style="display: ' + (isLoggedIn ? 'inline-block' : 'none') + '">删除</button>' +
-                '</div>'
+            memoList.innerHTML = memos
+                .filter(memo => currentCategory === 'all' || memo.category === currentCategory)
+                .map((memo, index) => \`
+                    <div class="memo-item" data-id="\${index}">
+                        <h3>\${memo.title}</h3>
+                        <p>\${memo.content}</p>
+                        <div class="memo-category">\${memo.category || '未分类'}</div>
+                        <div class="memo-actions" style="display: \${isLoggedIn ? 'flex' : 'none'}">
+                            <button onclick="editMemo(\${index})">编辑</button>
+                            <button onclick="deleteMemo(\${index})">删除</button>
+                        </div>
+                    </div>
+                \`).join('');
+        }
+
+        function renderCategories() {
+            const categories = ['全部', ...new Set(memos.map(memo => memo.category || '未分类'))];
+            const categoryList = document.getElementById('category-list');
+            categoryList.innerHTML = categories.map(category => 
+                \`<li onclick="filterCategory('\${category}')">\${category}</li>\`
             ).join('');
         }
 
-        async function addMemo() {
+        function filterCategory(category) {
+            currentCategory = category === '全部' ? 'all' : category;
+            renderMemos();
+        }
+
+        async function addOrUpdateMemo() {
             if (!isLoggedIn) {
                 alert('请先登录！');
                 return;
             }
-            const newMemo = document.getElementById('new-memo').value;
-            if (newMemo) {
-                const response = await fetch('/api/memos', {
-                    method: 'POST',
+            const title = document.getElementById('memo-title').value;
+            const content = document.getElementById('memo-content').value;
+            const category = document.getElementById('memo-category').value || '未分类';
+            
+            if (title && content) {
+                const newMemo = { title, content, category };
+                const method = editingMemoId !== null ? 'PUT' : 'POST';
+                const url = editingMemoId !== null ? \`/api/memos/\${editingMemoId}\` : '/api/memos';
+                
+                const response = await fetch(url, {
+                    method: method,
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ memo: newMemo, password: '${PASSWORD}' }),
+                    body: JSON.stringify({ ...newMemo, password: '${PASSWORD}' }),
                 });
                 if (response.ok) {
                     await fetchMemos();
-                    document.getElementById('new-memo').value = '';
+                    clearMemoForm();
+                    editingMemoId = null;
                 } else {
-                    alert('添加备忘录失败');
+                    alert(editingMemoId !== null ? '更新备忘录失败' : '添加备忘录失败');
                 }
             }
+        }
+
+        function editMemo(index) {
+            const memo = memos[index];
+            document.getElementById('memo-title').value = memo.title;
+            document.getElementById('memo-content').value = memo.content;
+            document.getElementById('memo-category').value = memo.category || '';
+            editingMemoId = index;
         }
 
         async function deleteMemo(index) {
@@ -562,6 +705,12 @@ function generateMemoPage() {
             } else {
                 alert('删除备忘录失败');
             }
+        }
+
+        function clearMemoForm() {
+            document.getElementById('memo-title').value = '';
+            document.getElementById('memo-content').value = '';
+            document.getElementById('memo-category').value = '';
         }
 
         function showLoginForm() {
@@ -584,14 +733,38 @@ function generateMemoPage() {
 
         function showEditControls() {
             const memoInput = document.getElementById('memo-input');
-            const deleteButtons = document.querySelectorAll('#memo-list button');
+            const memoActions = document.querySelectorAll('.memo-actions');
             if (isLoggedIn) {
                 memoInput.style.display = 'block';
-                deleteButtons.forEach(btn => btn.style.display = 'inline-block');
+                memoActions.forEach(action => action.style.display = 'flex');
             } else {
                 memoInput.style.display = 'none';
-                deleteButtons.forEach(btn => btn.style.display = 'none');
+                memoActions.forEach(action => action.style.display = 'none');
             }
+        }
+
+        document.getElementById('search-input').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const filteredMemos = memos.filter(memo => 
+                memo.title.toLowerCase().includes(searchTerm) || 
+                memo.content.toLowerCase().includes(searchTerm)
+            );
+            renderFilteredMemos(filteredMemos);
+        });
+
+        function renderFilteredMemos(filteredMemos) {
+            const memoList = document.getElementById('memo-list');
+            memoList.innerHTML = filteredMemos.map((memo, index) => \`
+                <div class="memo-item" data-id="\${index}">
+                    <h3>\${memo.title}</h3>
+                    <p>\${memo.content}</p>
+                    <div class="memo-category">\${memo.category || '未分类'}</div>
+                    <div class="memo-actions" style="display: \${isLoggedIn ? 'flex' : 'none'}">
+                        <button onclick="editMemo(\${index})">编辑</button>
+                        <button onclick="deleteMemo(\${index})">删除</button>
+                    </div>
+                </div>
+            \`).join('');
         }
 
         async function initPage() {
@@ -604,7 +777,8 @@ function generateMemoPage() {
 }
 
 async function handleAPI(request, key) {
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
 
   if (request.method === 'GET') {
     const data = await NAVIGATION_KV.get(key, 'json') || [];
@@ -627,13 +801,21 @@ async function handleAPI(request, key) {
 
   switch (request.method) {
     case 'POST':
-      items.push(key === KV_KEYS.MEMOS ? data.memo : data);
+      items.push(key === KV_KEYS.MEMOS ? data : data);
       await NAVIGATION_KV.put(key, JSON.stringify(items));
       return new Response('Item added successfully', { status: 201 });
     case 'PUT':
       if (key === KV_KEYS.LINKS) {
         await NAVIGATION_KV.put(key, JSON.stringify(data.links));
         return new Response('Links updated successfully', { status: 200 });
+      } else if (key === KV_KEYS.MEMOS) {
+        const index = parseInt(pathname.split('/').pop());
+        if (index >= 0 && index < items.length) {
+          items[index] = data;
+          await NAVIGATION_KV.put(key, JSON.stringify(items));
+          return new Response('Memo updated successfully', { status: 200 });
+        }
+        return new Response('Invalid index', { status: 400 });
       }
       break;
     case 'DELETE':
